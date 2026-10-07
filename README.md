@@ -1,4 +1,23 @@
-# Windows 11 countermeasures against pen-testing distributions
+# Countermeasures against pen-testing distributions
+
+Two toolkits that harden a device against the attack tooling shipped with Kali Linux and
+similar distributions, and that sweep it for evidence such tooling is already being used
+against it.
+
+| Platform | Location | Controls | Language |
+|---|---|---|---|
+| Windows 11 | this directory | 73 | PowerShell 5.1+ |
+| Android (Termux) | [`android-termux/`](android-termux/README.md) | 38 | Bash |
+
+They share a design: a declarative catalogue of controls, each naming the tooling it
+defeats, run by one engine with audit, apply, rollback and sweep modes, and an undo journal
+that records the previous value of everything it changes. **Volume encryption is out of
+scope in both** — BitLocker on Windows, file-based encryption and the lockscreen credential
+on Android.
+
+The rest of this file documents the Windows toolkit.
+
+---
 
 A PowerShell toolkit that hardens Windows 11 against the attack tooling shipped with Kali
 Linux and similar distributions, and that sweeps the host for evidence such tooling is
@@ -362,4 +381,3 @@ distribution. It does not make the host unattackable.
 - **BitLocker is excluded by design.** Nothing here protects data at rest or defends against
   an attacker with physical access and time. If you want that, enable BitLocker separately —
   this toolkit will not interfere with it either way.
-# win11-kali-counter
