@@ -1,4 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
+grep -q $'\r' "$0" && tr -d $'\r' <"$0" >"$0.lf" && mv -f "$0.lf" "$0" && exec bash "$0" "$@" #
 # counter-guard.sh - detect and neutralise tethering/SIM-spoof/remote-control
 # tooling on a rooted Android device. Run from Termux with root (tsu / su).
 #
@@ -28,7 +29,7 @@
 #   --termux-boot    with install: also write ~/.termux/boot entry (Termux:Boot)
 #   -h, --help
 
-VERSION="1.0.0"
+VERSION="1.2.0"
 export PATH="$PATH:/system/bin:/system/xbin:/vendor/bin:/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")"
@@ -71,14 +72,19 @@ else
 fi
 
 have() { command -v "$1" >/dev/null 2>&1; }
-say() { [ "$QUIET" = 1 ] || printf '%s\n' "$*"; }
+# Toolbox, toybox and su drop CR on many lines. A leftover \r fails string
+# compares and grep -x, breaks [ -gt ], and rewinds the cursor mid-line.
+nocr() { tr -d '\r'; }
+one() { nocr | tr -d '[:space:]'; }
+lines() { nocr | wc -l | tr -cd '0-9'; }
+say() { [ "$QUIET" = 1 ] || printf '%s\n' "${*//$'\r'/}"; }
 head_() { say ""; say "${C_B}== $* ==${C_0}"; }
 ok() { say "  ${C_G}[ok]${C_0} $*"; }
 info() { say "  ${C_D}[..]${C_0} $*"; }
 find_() { FOUND=$((FOUND + 1)); say "  ${C_R}[!!]${C_0} $*"; log "FOUND: $*"; }
 warn() { say "  ${C_Y}[??]${C_0} $*"; }
 fixed() { FIXED=$((FIXED + 1)); say "  ${C_G}[fix]${C_0} $*"; log "FIXED: $*"; }
-log() { [ -d "$STATE_DIR" ] && printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOGFILE" 2>/dev/null; }
+log() { [ -d "$STATE_DIR" ] && printf '%s %s\n' "$(date '+%F %T')" "${*//$'\r'/}" >>"$LOGFILE" 2>/dev/null; }
 
 # Run a remediation. Prints the intent in dry-run, does nothing in audit mode.
 act() {
@@ -100,7 +106,7 @@ act() {
 }
 
 need_root() {
-  if [ "$(id -u)" = 0 ]; then return 0; fi
+  if [ "$(id -u 2>/dev/null | one)" = 0 ]; then return 0; fi
   if have tsu; then exec tsu -c "$(printf '%q ' "$TERMUX_BASH" "$SELF" "$@")"; fi
   if have su; then exec su -c "$(printf '%q ' "$TERMUX_BASH" "$SELF" "$@")"; fi
   echo "root required: install tsu (pkg install tsu) and grant root to Termux" >&2
@@ -111,7 +117,8 @@ mkdir_state() { mkdir -p "$QDIR" 2>/dev/null; }
 
 # ---------------------------------------------------------------- helpers
 
-setting() { settings get "$1" "$2" 2>/dev/null | tr -d '\r'; }
+setting() { settings get "$1" "$2" 2>/dev/null | one; }
+prop() { getprop "$1" 2>/dev/null | one; }
 
 setprop_any() {
   if have resetprop; then resetprop -n "$1" "$2"; else setprop "$1" "$2"; fi
@@ -132,35 +139,41 @@ listen_ports() {
     while read -r _ loc _ st _; do
       [ "$st" = "0A" ] || continue
       hex="${loc##*:}"
+      hex="${hex//$'\r'/}"
       printf '%d\n' "0x$hex"
-    done <"$f"
+    done < <(nocr <"$f")
   done | sort -un
 }
 
 # Delete iptables rules whose -S line matches a regex. Prints how many were removed.
 purge_rules() {
   local bin="$1" table="$2" re="$3" rule n=0
+  set -f
   while IFS= read -r rule; do
     [ -n "$rule" ] || continue
-    # shellcheck disable=SC2046
-    if $bin -t "$table" $(printf '%s' "$rule" | sed 's/^-A /-D /') 2>/dev/null; then
+    # shellcheck disable=SC2086
+    if $bin -t "$table" ${rule/-A /-D } 2>/dev/null; then
       n=$((n + 1))
     fi
-  done < <($bin -t "$table" -S 2>/dev/null | grep -E '^-A ' | grep -vE "^-A $GUARD_CHAIN " | grep -E -e "$re")
+  done < <(list_rules "$bin" "$table" "$re")
+  set +f
   echo "$n"
 }
 
 list_rules() {
   local bin="$1" table="$2" re="$3"
-  $bin -t "$table" -S 2>/dev/null | grep -E '^-A ' | grep -vE "^-A $GUARD_CHAIN " | grep -E -e "$re"
+  $bin -t "$table" -S 2>/dev/null | nocr | grep -E '^-A ' | grep -vE "^-A $GUARD_CHAIN " | grep -E -e "$re" || true
 }
 
 tether_ifaces() {
-  if [ -n "${TETHER_IFACES:-}" ]; then printf '%s\n' $TETHER_IFACES; return; fi
+  local out
+  if [ -n "${TETHER_IFACES:-}" ]; then printf '%s\n' $TETHER_IFACES | nocr; return; fi
   if have ip; then
-    ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E "$TETHER_IF_RE"
+    out="$(ip -o link show 2>/dev/null | nocr)"
+    [ -n "$out" ] || out="$(ip link show 2>/dev/null | nocr)"
+    printf '%s\n' "$out" | awk -F': ' 'NF>1 {print $2}' | sed 's/@.*//' | nocr | grep -E "$TETHER_IF_RE" || true
   else
-    ls /sys/class/net 2>/dev/null | grep -E "$TETHER_IF_RE"
+    ls /sys/class/net 2>/dev/null | nocr | grep -E "$TETHER_IF_RE" || true
   fi
 }
 
@@ -204,7 +217,7 @@ check_sim_spoof() {
       any=1
       find_ "$b rewrites TTL/HL: $rule"
     done < <(list_rules "$b" mangle '-j (TTL|HL) --(ttl|hl)-set')
-    if [ "$(list_rules "$b" mangle '-j (TTL|HL) --(ttl|hl)-set' | wc -l)" -gt 0 ]; then
+    if [ "$(list_rules "$b" mangle '-j (TTL|HL) --(ttl|hl)-set' | lines)" -gt 0 ]; then
       act "remove $b TTL/HL mangle rules" purge_rules "$b" mangle '-j (TTL|HL) --(ttl|hl)-set'
     fi
     while IFS= read -r rule; do
@@ -212,7 +225,7 @@ check_sim_spoof() {
       any=1
       find_ "$b intercepts DNS: $rule"
     done < <(list_rules "$b" nat '--dport 53 .*-j DNAT')
-    if [ "$(list_rules "$b" nat '--dport 53 .*-j DNAT' | wc -l)" -gt 0 ]; then
+    if [ "$(list_rules "$b" nat '--dport 53 .*-j DNAT' | lines)" -gt 0 ]; then
       act "remove $b port-53 DNAT rules" purge_rules "$b" nat '--dport 53 .*-j DNAT'
     fi
   done
@@ -220,8 +233,8 @@ check_sim_spoof() {
 
   # Operator props vs what the radio actually registered on.
   local prop_num real tok match=0 have_real=0
-  prop_num="$(getprop gsm.operator.numeric 2>/dev/null)"
-  real="$(dumpsys telephony.registry 2>/dev/null | grep -oE '(m)?[Oo]perator[Nn]umeric=[0-9]{5,6}' | sed 's/.*=//' | sort -u)"
+  prop_num="$(prop gsm.operator.numeric)"
+  real="$(dumpsys telephony.registry 2>/dev/null | nocr | grep -oE '(m)?[Oo]perator[Nn]umeric=[0-9]{5,6}' | sed 's/.*=//' | sort -u)"
   if [ -n "$prop_num" ] && [ -n "$real" ]; then
     have_real=1
     for tok in $(printf '%s' "$prop_num" | tr ',' ' '); do
@@ -229,7 +242,7 @@ check_sim_spoof() {
     done
     if [ "$match" = 0 ]; then
       find_ "gsm.operator.numeric=$prop_num but radio registered on: $(printf '%s' "$real" | tr '\n' ' ')"
-      if [ "$(printf '%s\n' "$real" | wc -l)" = 1 ]; then
+      if [ "$(printf '%s\n' "$real" | lines)" = 1 ]; then
         act "restore gsm.operator.numeric=$real" setprop_any gsm.operator.numeric "$real"
       else
         info "multiple registered operators, not restoring automatically (reboot after removal)"
@@ -261,7 +274,7 @@ check_android_daemon() {
 
   tcp=""
   for p in service.adb.tcp.port persist.adb.tcp.port; do
-    port="$(getprop "$p" 2>/dev/null)"
+    port="$(prop "$p")"
     case "$port" in ''|-1|0) ;; *) tcp="$tcp $p=$port" ;; esac
   done
   if [ -n "$tcp" ]; then
@@ -283,7 +296,7 @@ check_android_daemon() {
   done
 
   local procs
-  procs="$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'scrcpy|com\.genymobile' | grep -vE "grep|counter-guard" )"
+  procs="$(ps -A 2>/dev/null | nocr | grep -E 'scrcpy|com\.genymobile' | grep -vE 'grep|counter-guard' || true)"
   if [ -n "$procs" ]; then
     find_ "scrcpy server running: $(printf '%s' "$procs" | head -n1 | cut -c1-100)"
     act "kill scrcpy processes" kill_pids "$procs"
@@ -298,8 +311,8 @@ check_android_daemon() {
   local keys=/data/misc/adb/adb_keys
   if [ -s "$keys" ]; then
     local n hosts
-    n="$(wc -l <"$keys")"
-    hosts="$(awk '{print $NF}' "$keys" | sort -u | tr '\n' ' ')"
+    n="$(lines <"$keys")"
+    hosts="$(nocr <"$keys" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
     if [ "$STRICT" = 1 ]; then
       find_ "$n trusted ADB key(s): $hosts"
       act "revoke all trusted ADB hosts" bash -c "rm -f $keys /data/misc/adb/adb_temp_keys.xml; stop adbd; start adbd"
@@ -317,12 +330,14 @@ check_android_daemon() {
     fi
   fi
 
-  local usb
-  usb="$(getprop sys.usb.state 2>/dev/null),$(getprop sys.usb.config 2>/dev/null)"
+  local usb cfg
+  usb="$(prop sys.usb.state)"
+  cfg="$(prop sys.usb.config)"
+  [ -n "$cfg" ] && [ "$cfg" != "$usb" ] && usb="$usb,$cfg"
   if printf '%s' "$usb" | grep -qE 'rndis|ncm|ecm'; then
     if [ "$BLOCK_TETHER" = 1 ]; then
       find_ "USB tethering function active ($usb)"
-      act "reset USB function to default" svc usb setFunctions
+      act "reset USB function to mtp" svc usb setFunctions mtp
     else
       warn "USB tethering function active ($usb) - --block-tether drops it"
     fi
@@ -331,9 +346,13 @@ check_android_daemon() {
   [ "$FOUND" = "$before" ] && ok "no wireless ADB, scrcpy or failover tether found"
 }
 
-kill_pids() { printf '%s\n' "$1" | awk '{print $1}' | xargs kill -9; }
+kill_pids() {
+  printf '%s\n' "$1" | nocr | awk '{
+    for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) { print $i; break }
+  }' | xargs kill -9
+}
 
-pkg_installed() { pm list packages 2>/dev/null | grep -qx "package:$1"; }
+pkg_installed() { pm list packages 2>/dev/null | nocr | grep -qx "package:$1"; }
 
 disable_pkg() {
   local pkg="$1"
@@ -348,14 +367,18 @@ disable_pkg() {
 }
 
 strip_a11y() { # pkg-or-class-regex
-  local re="$1" cur new
+  local re="$1" cur line new=""
   cur="$(setting secure enabled_accessibility_services)"
   [ -n "$cur" ] && [ "$cur" != "null" ] || return 0
-  new="$(printf '%s' "$cur" | tr ':' '\n' | grep -vE "$re" | paste -sd: -)"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    new="${new:+$new:}$line"
+  done < <(printf '%s\n' "$cur" | tr ':' '\n' | grep -vE "$re" || true)
   if [ -n "$new" ]; then
     settings put secure enabled_accessibility_services "$new"
   else
     settings delete secure enabled_accessibility_services
+    settings put secure accessibility_enabled 0
   fi
 }
 
@@ -382,20 +405,20 @@ check_apps() {
     done
   fi
 
-  svc_pkgs="$(dumpsys activity services 2>/dev/null | grep -oE "ServiceRecord\{[^}]* u[0-9]+ [^ /]+/[^ }]*($KNOWN_SVC_RE)" | sed -E 's/.* u[0-9]+ ([^ /]+)\/.*/\1/' | sort -u)"
+  svc_pkgs="$(dumpsys activity services 2>/dev/null | nocr | grep -oE "ServiceRecord\{[^}]* u[0-9]+ [^ /]+/[^ }]*($KNOWN_SVC_RE)" | sed -E 's/.* u[0-9]+ ([^ /]+)\/.*/\1/' | sort -u)"
   for pkg in $svc_pkgs; do
     find_ "mirroring service running in $pkg"
     act "stop $pkg" disable_pkg "$pkg"
   done
 
   local aistudio
-  aistudio="$(pm list packages 2>/dev/null | sed 's/^package://' | grep -E '^com\.aistudio\.' | grep -vxF "$(printf '%s\n' $KNOWN_PKGS)")"
+  aistudio="$(pm list packages 2>/dev/null | nocr | sed 's/^package://' | grep -E '^com\.aistudio\.' | grep -vxF "$(printf '%s\n' $KNOWN_PKGS)" || true)"
   for pkg in $aistudio; do
     warn "AI Studio generated app (same toolchain as the two tools above): $pkg"
   done
 
   local mp
-  mp="$(dumpsys media_projection 2>/dev/null | grep -iE 'package|uid' | head -n3)"
+  mp="$(dumpsys media_projection 2>/dev/null | nocr | grep -iE 'package|uid' | head -n3 || true)"
   [ -n "$mp" ] && info "media_projection: $(printf '%s' "$mp" | tr -s ' \n' ' ' | cut -c1-140)"
 
   [ "$FOUND" = "$before" ] && ok "no known mirror/auto-tether apps or services"
@@ -439,8 +462,8 @@ guard_hits() {
   local bin total=0 n
   for bin in iptables ip6tables; do
     have "$bin" || continue
-    n="$($bin -t mangle -nvxL "$GUARD_CHAIN" 2>/dev/null | awk '/cg-spoof65/ {s+=$1} END {print s+0}')"
-    total=$((total + n))
+    n="$($bin -t mangle -nvxL "$GUARD_CHAIN" 2>/dev/null | nocr | awk '/cg-spoof65/ {s+=$1} END {print s+0}' | one)"
+    total=$((total + ${n:-0}))
   done
   echo "$total"
 }
@@ -473,7 +496,7 @@ check_ttl_clients() {
         guard_remove
       fi
     fi
-  elif [ "$APPLY" != 1 ]; then
+  elif [ "$APPLY" != 1 ] && ! iptables -t mangle -C PREROUTING -j "$GUARD_CHAIN" 2>/dev/null; then
     say "       ${C_D}-> would fix: install firewall guard on tether interfaces (run with 'fix')${C_0}"
   fi
 }
@@ -506,8 +529,8 @@ notify() {
 
 watch_loop() {
   mkdir_state
-  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
-    echo "watch already running (pid $(cat "$PIDFILE"))"; exit 0
+  if [ -f "$PIDFILE" ] && kill -0 "$(one <"$PIDFILE")" 2>/dev/null; then
+    echo "watch already running (pid $(one <"$PIDFILE"))"; exit 0
   fi
   echo $$ >"$PIDFILE"
   trap 'rm -f "$PIDFILE"; exit 0' INT TERM
@@ -533,7 +556,7 @@ install_boot() {
   cp "$SELF" "$INSTALL_DIR/counter-guard.sh" && chmod 755 "$INSTALL_DIR/counter-guard.sh"
   cat >"$BOOT_HOOK" <<EOF
 #!/system/bin/sh
-until [ "\$(getprop sys.boot_completed)" = 1 ]; do sleep 5; done
+until [ "\$(getprop sys.boot_completed | tr -d '\\r[:space:]')" = 1 ]; do sleep 5; done
 sleep 20
 COUNTER_GUARD_DIR="$STATE_DIR" nohup "$TERMUX_BASH" "$INSTALL_DIR/counter-guard.sh" watch $WATCH_SECS$flags >/dev/null 2>&1 &
 EOF
@@ -553,7 +576,7 @@ EOF
 }
 
 uninstall_all() {
-  if [ -f "$PIDFILE" ]; then kill "$(cat "$PIDFILE")" 2>/dev/null; rm -f "$PIDFILE"; fi
+  if [ -f "$PIDFILE" ]; then kill "$(one <"$PIDFILE")" 2>/dev/null; rm -f "$PIDFILE"; fi
   rm -f "$BOOT_HOOK" "$TERMUX_HOME/.termux/boot/counter-guard.sh"
   rm -rf "$INSTALL_DIR"
   guard_remove
@@ -564,8 +587,8 @@ uninstall_all() {
 }
 
 show_status() {
-  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
-    echo "watch: running (pid $(cat "$PIDFILE"))"
+  if [ -f "$PIDFILE" ] && kill -0 "$(one <"$PIDFILE")" 2>/dev/null; then
+    echo "watch: running (pid $(one <"$PIDFILE"))"
   else
     echo "watch: not running"
   fi
@@ -578,10 +601,11 @@ show_status() {
   [ -f "$LOGFILE" ] && { echo "last log lines:"; tail -n 8 "$LOGFILE"; }
 }
 
-usage() { sed -n '2,/^VERSION=/p' "$SELF" | sed '$d' | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '/^# counter-guard/,/^VERSION=/p' "$SELF" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
 # ---------------------------------------------------------------- main
 
+set -- "${@//$'\r'/}"
 ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in

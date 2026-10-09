@@ -1,0 +1,23 @@
+
+pkg update -y
+pkg install proot -y
+
+cat > $PREFIX/bin/sudo << 'EOF'
+#!/data/data/com.termux/files/usr/bin/sh
+unset LD_PRELOAD
+exec proot --root-id -0 "$@"
+EOF
+
+chmod +x $PREFIX/bin/sudo
+
+setup-termux-storage
+
+cd storage
+mv /Download/script.sh ~/
+sudo chmod +x script.sh
+bash
+sudo ./script.sh
+
+
+
+pas editer sous Windows le script sinon \'r'  en erreur
