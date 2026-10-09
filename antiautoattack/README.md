@@ -1,5 +1,5 @@
 # AiAttackCounter
-
+96% 51 1de mieux que anti kali test bon 87 pass
 A single PowerShell script that hardens and monitors a **Windows 11** machine against
 [saltless-bruh/ai-auto-attack-framework](https://github.com/saltless-bruh/ai-auto-attack-framework),
 an AI-orchestrated pentest framework, and against the toolchain it drives.
