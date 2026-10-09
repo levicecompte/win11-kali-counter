@@ -1,5 +1,5 @@
 # Android countermeasures against pen-testing distributions
-
+dont forget to put the execution right on the lib directory too.
 A Termux shell toolkit that hardens an Android phone against the tooling shipped with Kali
 Linux and similar distributions, and that sweeps the device for evidence such tooling is
 already being used against it.
