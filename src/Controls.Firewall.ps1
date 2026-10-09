@@ -118,7 +118,7 @@ function Test-CountermeasureFirewallRule {
     foreach ($spec in $specs) {
         $rule = Get-NetFirewallRule -DisplayName $spec.DisplayName -ErrorAction SilentlyContinue
         if (-not $rule -or $rule.Enabled -ne 'True' -or $rule.Action -ne 'Block') {
-            $missing.Add($spec.DisplayName -replace '^KCM - ', '')
+            $missing.Add($spec.DisplayName -replace '^KCM - ')
         }
     }
 
