@@ -5,13 +5,14 @@
     command output, the detection heuristics used by the threat sweep, and the engine
     helpers that decide whether a setting is compliant.
 #>
+Describe 'ConvertTo' {
+    BeforeAll {
+        $script:RepoRoot = Split-Path -Parent $PSScriptRoot
+        $script:SrcRoot = Join-Path $script:RepoRoot 'src'
 
-BeforeAll {
-    $script:RepoRoot = Split-Path -Parent $PSScriptRoot
-    $script:SrcRoot = Join-Path $script:RepoRoot 'src'
-
-    foreach ($file in @('Common.ps1', 'Controls.Credentials.ps1', 'Controls.Telemetry.ps1', 'ThreatSweep.ps1', 'Reporting.ps1')) {
-        . (Join-Path $script:SrcRoot $file)
+        foreach ($file in @('Common.ps1', 'Controls.Credentials.ps1', 'Controls.Telemetry.ps1', 'ThreatSweep.ps1', 'Reporting.ps1')) {
+            . (Join-Path $script:SrcRoot $file)
+        }
     }
 }
 

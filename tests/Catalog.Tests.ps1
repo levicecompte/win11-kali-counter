@@ -5,34 +5,35 @@
     so these run on any platform and catch structural mistakes before the script is ever
     pointed at a real machine.
 #>
+Describe 'Control' {
+    BeforeAll {
+        $script:RepoRoot = Split-Path -Parent $PSScriptRoot
+        $script:SrcRoot = Join-Path $script:RepoRoot 'src'
 
-BeforeAll {
-    $script:RepoRoot = Split-Path -Parent $PSScriptRoot
-    $script:SrcRoot = Join-Path $script:RepoRoot 'src'
+        foreach ($file in @(
+                'Common.ps1'
+                'Controls.Firewall.ps1'
+                'Controls.Protocols.ps1'
+                'Controls.Credentials.ps1'
+                'Controls.RemoteAccess.ps1'
+                'Controls.Services.ps1'
+                'Controls.Defender.ps1'
+                'Controls.Telemetry.ps1'
+                'ThreatSweep.ps1'
+                'Rollback.ps1'
+                'Reporting.ps1'
+            )) {
+            . (Join-Path $script:SrcRoot $file)
+        }
 
-    foreach ($file in @(
-            'Common.ps1'
-            'Controls.Firewall.ps1'
-            'Controls.Protocols.ps1'
-            'Controls.Credentials.ps1'
-            'Controls.RemoteAccess.ps1'
-            'Controls.Services.ps1'
-            'Controls.Defender.ps1'
-            'Controls.Telemetry.ps1'
-            'ThreatSweep.ps1'
-            'Rollback.ps1'
-            'Reporting.ps1'
-        )) {
-        . (Join-Path $script:SrcRoot $file)
+        $script:Catalog = @(Get-FirewallControl) +
+        @(Get-ProtocolControl) +
+        @(Get-CredentialControl) +
+        @(Get-RemoteAccessControl) +
+        @(Get-ServiceControl) +
+        @(Get-DefenderControl -Tier 'Aggressive') +
+        @(Get-TelemetryControl)
     }
-
-    $script:Catalog = @(Get-FirewallControl) +
-    @(Get-ProtocolControl) +
-    @(Get-CredentialControl) +
-    @(Get-RemoteAccessControl) +
-    @(Get-ServiceControl) +
-    @(Get-DefenderControl -Tier 'Aggressive') +
-    @(Get-TelemetryControl)
 }
 
 Describe 'Control catalogue' {
