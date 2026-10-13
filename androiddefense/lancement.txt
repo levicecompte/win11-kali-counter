@@ -13,6 +13,7 @@ chmod +x $PREFIX/bin/sudo
 setup-termux-storage
 
 cd storage
+dos2unix script.sh
 mv /Download/script.sh ~/
 sudo chmod +x script.sh
 bash
