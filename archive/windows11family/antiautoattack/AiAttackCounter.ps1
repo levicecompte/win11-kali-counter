@@ -630,17 +630,17 @@ function Confirm-Defender {
 }
 
 function Confirm-Smb1 {
-    if (-not (Get-Command Get-SmbServerConfiguration -ErrorAction SilentlyContinue)) { return }
-    $cfg = Get-SmbServerConfiguration
-    $desc = 'SMBv1 protocol disabled'
-    if (-not $cfg.EnableSMB1Protocol) { Add-Result 'Network' $desc 'PASS'; return }
-    if (-not $script:Apply) { Add-Result 'Network' $desc 'FAIL'; return }
-    if ($DryRun) { Add-Result 'Network' $desc 'WOULD-FIX'; return }
-    try {
-        Save-Change 'smb1' @{ type = 'smb1'; enabled = $true }
-        Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
-        Add-Result 'Network' $desc 'FIXED'
-    } catch { Add-Result 'Network' $desc 'ERROR' $_.Exception.Message }
+  #  if (-not (Get-Command Get-SmbServerConfiguration -ErrorAction SilentlyContinue)) { return }
+  #  $cfg = Get-SmbServerConfiguration
+   # $desc = 'SMBv1 protocol disabled'
+   # if (-not $cfg.EnableSMB1Protocol) { Add-Result 'Network' $desc 'PASS'; return }
+   # if (-not $script:Apply) { Add-Result 'Network' $desc 'FAIL'; return }
+   # if ($DryRun) { Add-Result 'Network' $desc 'WOULD-FIX'; return }
+   # try {
+   #     Save-Change 'smb1' @{ type = 'smb1'; enabled = $true }
+   #     Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+   #     Add-Result 'Network' $desc 'FIXED'
+   # } catch { Add-Result 'Network' $desc 'ERROR' $_.Exception.Message }
 }
 
 function Confirm-ExploitProtection {

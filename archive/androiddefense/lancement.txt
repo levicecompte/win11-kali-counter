@@ -10,9 +10,15 @@ EOF
 
 chmod +x $PREFIX/bin/sudo
 
-setup-termux-storage
+
+
+mv ./script.sh ~/script.sh
+chmod u+x script.sh
+sh script.sh
+termux-setup-storage
 
 cd storage
+dos2unix script.sh
 mv /Download/script.sh ~/
 sudo chmod +x script.sh
 bash
