@@ -1,9 +1,3 @@
-windows:
-stop window defender virus ,ethernet off
-launch in administrator powershell: 
- powershell.exe -ExecutionPolicy byPass .\Lancer-Durcissement.bat
-
-
 android phone:
 install f droid
 install termux app (the principal only)
