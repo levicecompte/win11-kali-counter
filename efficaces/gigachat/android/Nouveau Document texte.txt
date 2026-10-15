@@ -1,0 +1,4 @@
+pkg update && pkg install -y curl wget git python3 proot-distro iptables openssl-tool
+
+termux-setup-storage
+bash ~/harden.sh
